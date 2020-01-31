@@ -119,14 +119,16 @@ func main() {
 	//controllers := client.Database(dbName).Collection("controllers")
 	lamps := client.Database(dbName).Collection("lamps")
 
-	/*options := options.Find()
-	options.SetLimit(20)
-	options.SetSort(bson.M{"received": 1})*/
+	opts := options.Find()
+	opts.SetLimit(20)
+	opts.SetSort(bson.M{"received": 1})
 
-	cur, err := lamps.Find(context.Background(), bson.D{{}} /*, options*/)
+	cur, err := lamps.Find(context.Background(), bson.D{{}}, opts)
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	var lastReceived primitive.DateTime
 
 	for cur.Next(context.Background()) {
 		var result Lamp // bson.M
@@ -149,11 +151,45 @@ func main() {
 			}
 		}
 
-		log.Printf("%s %s", result.Mac, result.Received.Time().String())
-
+		lastReceived = result.Received
+		log.Printf("%s %s", result.Mac, lastReceived.Time().String())
 	}
 
 	cur.Close(context.Background())
+
+	log.Println("======================================")
+
+	opts = options.Find()
+	opts.SetSort(bson.M{"received": 1})
+	opts.SetLimit(20)
+
+	ncur, err := lamps.Find(context.Background(), bson.M{"received": bson.M{"$gt": lastReceived}}, opts)
+
+	for ncur.Next(context.Background()) {
+		var result Lamp // bson.M
+		e := ncur.Decode(&result)
+		if e != nil {
+			log.Fatal(e)
+		}
+
+		if result.Lat != nil {
+			lat, err := strconv.ParseFloat(*result.Lat, 64)
+			if err == nil {
+				log.Printf("%f", lat)
+			}
+		}
+
+		if result.Lng != nil {
+			lng, err := strconv.ParseFloat(*result.Lng, 64)
+			if err == nil {
+				log.Printf("%f", lng)
+			}
+		}
+
+		log.Printf("%s %s", result.Mac, result.Received.Time().String())
+	}
+
+	ncur.Close(context.Background())
 
 	client.Disconnect(context.TODO())
 }
